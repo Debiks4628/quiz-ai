@@ -130,7 +130,7 @@
       if (!prompt) return;
       cardContainer.innerHTML = ''; submitAnswersBtn.style.display='none';
 
-      const data = await post('https://quiz-ai.onrender.com/api/generate',{prompt,count:quantity});
+      const data = await post('https://quiz-ai-p88k.onrender.com/api/generate',{prompt,count:quantity});
       if (!Array.isArray(data)||!data.length) return alert('生成失败');
 
       data.forEach(item=>{
@@ -156,7 +156,7 @@
         userAns:c.querySelector('.answer-input').value.trim(),
         correct:c.dataset.correct
       }));
-      const fb = await post('https://quiz-ai.onrender.com/api/grade',{answers});
+      const fb = await post('https://quiz-ai-p88k.onrender.com/api/grade',{answers});
       fb.forEach(({index,isCorrect,explanation})=>{
         const c=cardContainer.children[index-1];
         c.style.border=isCorrect?'2px solid #7ed321':'2px solid #ff4d4f';
