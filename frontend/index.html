@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI题目生成器</title>
+  <style>
+    :root {
+      --primary: #4a90e2;
+      --bg: #f5f7fa;
+      --card-bg: #ffffff;
+      --shadow: rgba(0, 0, 0, 0.1);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg)}
+    .container{max-width:600px;margin:20px auto;padding:0 10px}
+    .header{display:flex;align-items:center;position:relative}
+    .header input{flex:1;padding:10px 14px;border:1px solid #ccc;border-radius:4px;font-size:16px;transition:border-color .3s}
+    .header input:focus{border-color:var(--primary);outline:none}
+    .header button{margin-left:8px;padding:10px;border:none;background:var(--primary);color:#fff;font-size:16px;border-radius:4px;cursor:pointer;transition:background .3s,transform .1s}
+    .header button:active{transform:scale(.95)}
+    #generateBtn{background:#7ed321;display:none}
+    .settings-menu{position:absolute;top:100%;right:0;margin-top:6px;background:#fff;border:1px solid #ddd;border-radius:4px;box-shadow:0 4px 8px var(--shadow);padding:10px;display:none;width:150px;z-index:10}
+    .settings-menu.show{display:block}
+    .settings-menu label{font-size:14px;color:#333}
+    .settings-menu input{width:100%;padding:6px;margin-top:4px;border:1px solid #ccc;border-radius:4px;font-size:14px}
+    .settings-menu .save-btn{display:block;margin:12px auto 0;padding:6px 12px;background:var(--primary);color:#fff;border:none;border-radius:4px;font-size:14px;cursor:pointer;transition:background .3s}
+    .settings-menu .save-btn:active{background:#3a78c2}
+    .cards{margin-top:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px}
+    .card{background:var(--card-bg);border-radius:6px;box-shadow:0 2px 4px var(--shadow);padding:12px;display:flex;flex-direction:column;transition:transform .2s}
+    .card:hover{transform:translateY(-4px)}
+    .stars{margin-bottom:8px;color:#f5a623;font-size:14px}
+    .question{flex:1;margin-bottom:8px;font-size:14px;color:#333;cursor:pointer}
+    .explanation{display:none;font-size:12px;color:#666;margin-bottom:8px}
+    .answer-input{padding:6px;border:1px solid #ccc;border-radius:4px;font-size:14px;margin-bottom:8px}
+    #submitAnswersBtn{display:none;margin:20px auto;padding:10px 20px;background:var(--primary);color:#fff;border:none;border-radius:4px;font-size:16px;cursor:pointer;transition:background .3s,transform .1s}
+    #submitAnswersBtn:active{transform:scale(.95)}
+    /* 简易加载指示器 */
+    #loading{display:none;position:fixed;inset:0;background:rgba(255,255,255,.6);align-items:center;justify-content:center;z-index:99;font-size:18px;color:var(--primary)}
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <input type="text" id="textInput" placeholder="输入内容..." />
+      <button id="settingsBtn">⚙️</button>
+      <button id="generateBtn">生成</button>
+
+      <div class="settings-menu" id="settingsMenu">
+        <label for="quantityInput">生成数量（正整数）</label>
+        <input type="number" id="quantityInput" min="1" />
+        <button class="save-btn" id="saveSettingsBtn">确定</button>
+      </div>
+    </div>
+
+    <div class="cards" id="cardContainer"></div>
+    <button id="submitAnswersBtn">提交答案</button>
+  </div>
+
+  <div id="loading">加载中…</div>
+
+  <script>
+    /* ==== DOM ==== */
+    const textInput = document.getElementById('textInput');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const generateBtn = document.getElementById('generateBtn');
+    const settingsMenu = document.getElementById('settingsMenu');
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const quantityInput = document.getElementById('quantityInput');
+    const cardContainer = document.getElementById('cardContainer');
+    const submitAnswersBtn = document.getElementById('submitAnswersBtn');
+    const loading = document.getElementById('loading');
+
+    let quantity = 1;
+    const spin = t=>{loading.textContent=t||'';loading.style.display=t?'flex':'none';};
+
+    /* ==== 初始化 ==== */
+    document.addEventListener('DOMContentLoaded', () => {
+      const saved = localStorage.getItem('quantity');
+      if (saved && +saved > 0) quantity = +saved;
+      quantityInput.value = quantity;
+    });
+
+    /* 输入框显示生成按钮 */
+    textInput.addEventListener('input', () => {
+      generateBtn.style.display = textInput.value.trim() ? 'inline-block' : 'none';
+    });
+
+    /* 设置菜单开关 */
+    settingsBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      settingsMenu.classList.toggle('show');
+    });
+    document.addEventListener('click', e => {
+      if (!settingsMenu.contains(e.target) && !settingsBtn.contains(e.target))
+        settingsMenu.classList.remove('show');
+    });
+
+    /* 保存生成数量 */
+    saveSettingsBtn.addEventListener('click', () => {
+      const v = +quantityInput.value;
+      if (v > 0) {
+        quantity = v;
+        localStorage.setItem('quantity', v);
+        settingsMenu.classList.remove('show');
+      } else alert('请输入正整数');
+    });
+
+    /* 星级渲染 */
+    const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
+
+    /* 通用 POST */
+    async function post(url,data){
+      spin('加载中…');
+      try{
+        const r = await fetch(url,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(data)
+        });
+        return await r.json();
+      }finally{ spin(); }
+    }
+
+    /* 生成题目 */
+    generateBtn.addEventListener('click', async () => {
+      const prompt = textInput.value.trim();
+      if (!prompt) return;
+      cardContainer.innerHTML = ''; submitAnswersBtn.style.display='none';
+
+      const data = await post('https://quiz-ai.onrender.com/api/generate',{prompt,count:quantity});
+      if (!Array.isArray(data)||!data.length) return alert('生成失败');
+
+      data.forEach(item=>{
+        const card=document.createElement('div');card.className='card';
+        card.dataset.correct=(item.answer||'').trim();
+        card.innerHTML=`<div class="stars">${stars(item.difficulty||1)}</div>
+          <div class="question">${item.question||''}</div>
+          <div class="explanation">解析：${item.explanation||''}</div>
+          <input class="answer-input" placeholder="请输入答案..."/>`;
+        card.querySelector('.question').onclick=()=>{
+          const ex=card.querySelector('.explanation');
+          ex.style.display=ex.style.display==='none'?'block':'none';
+        };
+        cardContainer.appendChild(card);
+      });
+      submitAnswersBtn.style.display='block';
+    });
+
+    /* 提交答案 */
+    submitAnswersBtn.addEventListener('click',async()=>{
+      const answers=[...cardContainer.children].map((c,i)=>({
+        index:i+1,
+        userAns:c.querySelector('.answer-input').value.trim(),
+        correct:c.dataset.correct
+      }));
+      const fb = await post('https://quiz-ai.onrender.com/api/grade',{answers});
+      fb.forEach(({index,isCorrect,explanation})=>{
+        const c=cardContainer.children[index-1];
+        c.style.border=isCorrect?'2px solid #7ed321':'2px solid #ff4d4f';
+        const ex=c.querySelector('.explanation');
+        ex.textContent = explanation;
+        ex.style.display='block';
+      });
+      alert('批阅完成！');
+    });
+  </script>
+</body>
+</html>
